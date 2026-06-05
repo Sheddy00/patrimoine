@@ -4,6 +4,11 @@ on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: true
+        default: 'main'
 
 jobs:
   publish:
@@ -12,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Setup mvn
         uses: s4u/setup-maven-action@v1.18.0
@@ -32,3 +39,75 @@ jobs:
 
       - name: Publish package to AWS CodeArtifact
         run: export CODEARTIFACT_TOKEN=$(aws codeartifact get-authorization-token --domain maven-hei-lab --domain-owner 057045785189 --region eu-west-3 --query authorizationToken --output text) && mvn clean deploy --settings ./.m2/settings.xml
+
+      - name: Build JAR executable
+        run: |
+          set -e
+          
+          PROJECT_ROOT="$(pwd)"
+          SRC_DIR="$PROJECT_ROOT/src/main/java"
+          ANTLR_GENERATED="$PROJECT_ROOT/target/generated-sources/antlr/school/hei/patrimoine/patrilang/antlr"
+          OUT_DIR="$PROJECT_ROOT/out/artifacts/patrimoine_jar"
+          JAR_NAME="patrimoine.jar"
+          JAR_PATH="$OUT_DIR/$JAR_NAME"
+          CLASSES_DIR="/tmp/patrimoine_classes"
+          M2="$HOME/.m2/repository"
+          MAIN_CLASS="school.hei.patrimoine.visualisation.swing.ihm.google.PatriLangViewer"
+          
+          LOMBOK_JAR=$(find "$M2/org/projectlombok/lombok" -name "lombok-*.jar" \
+          ! -name "*sources*" | sort -V | tail -1)
+          if [[ -z "$LOMBOK_JAR" ]]; then
+          echo "ERROR : lombok JAR not found in $M2"
+          exit 1
+          fi
+          echo "==> Lombok : $LOMBOK_JAR"
+          
+          echo "==> ANTLR source generation..."
+          mvn generate-sources -q -DskipTests -Dvaadin.buildFrontend.skip=true
+          
+          echo "==> Compiling the sources..."
+          mkdir -p "$CLASSES_DIR"
+          CLASSPATH=$(find "$M2" -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" | tr '\n' ':')
+          find "$SRC_DIR" "$ANTLR_GENERATED" -name "*.java" 2>/dev/null > /tmp/sources.txt
+          
+          javac \
+          -encoding UTF-8 \
+          -processorpath "$LOMBOK_JAR" \
+          -processor "lombok.launch.AnnotationProcessorHider\$AnnotationProcessor" \
+          -cp "$CLASSPATH" \
+          -d "$CLASSES_DIR" \
+          @/tmp/sources.txt
+          
+          echo "==> Copying resources..."
+          cp -r "$PROJECT_ROOT/src/main/resources/." "$CLASSES_DIR/"
+          
+          echo "==> Assembling the JAR..."
+          mkdir -p "$OUT_DIR"
+          TMPJAR="/tmp/patrimoine_jar_merge"
+          rm -rf "$TMPJAR" && mkdir -p "$TMPJAR"
+          
+          while IFS= read -r jar; do
+          [ -f "$jar" ] && (cd "$TMPJAR" && jar xf "$jar" 2>/dev/null || true)
+          done < <(grep 'extracted-dir' "$PROJECT_ROOT/.idea/artifacts/patrimoine_jar.xml" \
+          | sed 's|.*path="\$MAVEN_REPOSITORY\$/\([^"]*\)".*|\1|' \
+          | sed "s|^|$M2/|")
+          
+          cp -r "$CLASSES_DIR/." "$TMPJAR/"
+          
+          mkdir -p "$TMPJAR/META-INF"
+          printf "Manifest-Version: 1.0\nMain-Class: %s\n\n" "$MAIN_CLASS" \
+          > "$TMPJAR/META-INF/MANIFEST.MF"
+          
+          (cd "$TMPJAR" && jar cfm "$JAR_PATH" META-INF/MANIFEST.MF .)
+          rm -rf "$TMPJAR" "$CLASSES_DIR"
+          
+          echo "==> JAR created : $JAR_PATH ($(du -sh "$JAR_PATH" | cut -f1))"
+
+      - name: Upload patrimoine.jar to S3
+        run: |
+          aws s3 cp out/artifacts/patrimoine_jar/patrimoine.jar \
+            s3://patrimoine-bucket/patrimoine.jar \
+            --metadata-directive REPLACE \
+            --content-disposition 'attachment; filename="patrimoine.jar"' \
+            --acl private
+          echo "==> Done : patrimoine.jar uploaded on s3://patrimoine-bucket/patrimoine.jar"
