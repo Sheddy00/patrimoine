@@ -1,17 +1,22 @@
-package school.hei.patrimoine.modele.possession;
+package school.hei.patrimoine.modele.vente;
 
+import static java.time.Month.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static school.hei.patrimoine.modele.Argent.euro;
 
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import school.hei.patrimoine.modele.Argent;
 import school.hei.patrimoine.modele.Devise;
+import school.hei.patrimoine.modele.possession.Compte;
+import school.hei.patrimoine.modele.possession.Materiel;
+import school.hei.patrimoine.modele.possession.Vente;
 
 class VenteTest {
-  private static final LocalDate T0 = LocalDate.of(2024, 1, 1);
-  private static final LocalDate T1 = LocalDate.of(2024, 6, 1);
-  private static final LocalDate T2 = LocalDate.of(2024, 9, 1);
+  private static final LocalDate T0 = LocalDate.of(2024, JANUARY, 1);
+  private static final LocalDate T1 = LocalDate.of(2024, JUNE, 1);
+  private static final LocalDate T2 = LocalDate.of(2024, SEPTEMBER, 1);
 
   private static final Argent VALEUR_COMPTABLE = new Argent(10_000, Devise.EUR);
   private static final Argent PRIX_VENTE = new Argent(11_000, Devise.EUR);
@@ -97,5 +102,33 @@ class VenteTest {
   void sansVente_getPrixVenteEtGetDateVenteSontVides() {
     assertTrue(materiel.getPrixVente().isEmpty());
     assertTrue(materiel.getDateVente().isEmpty());
+  }
+
+  @Test
+  void getValeurMarche_materielVendu_sansVmExplicite_retourneZero() {
+    var materiel = new Materiel("Voiture", T0, T0, euro(20_000), 0.0);
+    var beneficiaire = new Compte("CompteBenef", T0, euro(0));
+
+    materiel.vendre(T1, euro(18_000), beneficiaire);
+
+    assertEquals(euro(0), materiel.getValeurMarche(T2));
+  }
+
+  @Test
+  void getValeurMarche_compteNonVendu_sansVm_retourneToujoursLaValeurComptable() {
+    var compte = new Compte("CompteCourant", T0, euro(5_000));
+
+    assertEquals(euro(5_000), compte.getValeurMarche(T2));
+  }
+
+  @Test
+  void getValeurMarche_avecVmExplicite_resteInchangeeMemeApresVente() {
+    var materiel = new Materiel("Voiture", T0, T0, euro(20_000), 0.0);
+    new ValeurMarche(materiel, T0, euro(22_000));
+    var beneficiaire = new Compte("CompteBenef", T0, euro(0));
+
+    materiel.vendre(T1, euro(18_000), beneficiaire);
+
+    assertEquals(euro(22_000), materiel.getValeurMarche(T1));
   }
 }

@@ -98,7 +98,7 @@ public abstract sealed class Possession extends Objectivable
         .filter(vm -> vm.t().isBefore(t) || vm.t().isEqual(t))
         .max(Comparator.comparing(ValeurMarche::t))
         .map(ValeurMarche::valeur)
-        .orElse(valeurComptable);
+        .orElse(valeurComptable());
   }
 
   @Override

@@ -42,6 +42,13 @@ public final class PatrimoinePersonnel extends Possession {
   }
 
   @Override
+  public Argent getValeurMarche(LocalDate t) {
+    var valeurMarchePourToutPossesseurs = patrimoine.getValeurMarche();
+    var tauxPersonne = patrimoine.getPossesseurs().get(personne);
+    return valeurMarchePourToutPossesseurs.mult(tauxPersonne);
+  }
+
+  @Override
   public Possession projectionFuture(LocalDate tFutur) {
     return new PatrimoinePersonnel(patrimoine.projectionFuture(tFutur), personne, valeursMarche);
   }
