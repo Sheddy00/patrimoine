@@ -86,7 +86,12 @@ public class PossessionRecoupeeListPanel extends JPanel {
                 if (currentPagination != null && currentPagination.page() < totalPages) {
                   this.isLoading = true;
                   var nextPage = currentPagination.page() + 1;
-                  state.update("pagination", new Pagination(nextPage, currentPagination.size()));
+                  state.update(
+                      Map.of(
+                          "isInfiniteScroll",
+                          true,
+                          "pagination",
+                          new Pagination(nextPage, currentPagination.size())));
                 }
               }
             });

@@ -295,12 +295,22 @@ public class RecoupementPage extends LazyPage {
               Map<String, PieceJustificative> currentPjMap = pjMap != null ? pjMap : Map.of();
               var currentPagination = getPagination();
 
-              var isPaged = state.get("isPaged");
-              if (Boolean.TRUE.equals(isPaged) || currentPagination.page() == 1) {
+              var isPaged = Boolean.TRUE.equals(state.get("isPaged"));
+              var isInfiniteScroll = state.get("isInfiniteScroll");
+              if (!Boolean.TRUE.equals(isInfiniteScroll)
+                  && !isPaged
+                  && currentPagination.page() > 1) {
+                state.update("pagination", new Pagination(1, RECOUPEMENT_ITEM_PER_PAGE));
+                return;
+              }
+              if (isPaged
+                  || currentPagination.page() == 1
+                  || !Boolean.TRUE.equals(isInfiniteScroll)) {
                 possessionRecoupeeListPanel.update(list, currentPjMap);
               } else {
                 possessionRecoupeeListPanel.appendData(list, currentPjMap);
               }
+              state.update("isInfiniteScroll", false);
             })
         .build()
         .execute();
